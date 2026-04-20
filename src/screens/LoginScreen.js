@@ -10,7 +10,7 @@ import {
 const LoginScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.logo}>🩸 BloodDonation</Text>
+      <Text style={styles.logo}>🩸 Blood Donation</Text>
 
       <TextInput
         style={styles.input}
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#d32f2f",
     padding: 15,
     borderRadius: 8,
     marginBottom: 15,
