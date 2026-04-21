@@ -314,7 +314,9 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Urgent Requests</Text>
-            <TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("RequestBlood")}
+            >
               <Text style={styles.seeAll}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -354,6 +356,20 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
       </ScrollView>
+
+      {/* SOS Floating Button */}
+      <Animated.View
+        style={[styles.sosFab, { transform: [{ scale: pulseAnim }] }]}
+      >
+        <TouchableOpacity
+          style={styles.sosFabBtn}
+          onPress={() => navigation.navigate("RequestBlood")}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="water" size={18} color="#fff" />
+          <Text style={styles.sosFabText}>Need Blood?</Text>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
@@ -570,4 +586,24 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   emptySubText: { fontSize: 13, color: COLORS.gray400, marginTop: 4 },
+  sosFab: {
+    position: "absolute",
+    bottom: 24,
+    alignSelf: "center",
+  },
+  sosFabBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: RADIUS.full,
+    elevation: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+  },
+  sosFabText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });

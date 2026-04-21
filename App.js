@@ -12,8 +12,9 @@ import HomeScreen from "./src/screens/HomeScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
-import ProjectScreen from "./src/screens/Projectscreen";
-import DonorDetailScreen from "./src/screens/Donordetailscreen";
+import ProjectScreen from "./src/screens/ProjectScreen";
+import DonorDetailScreen from "./src/screens/DonorDetailScreen";
+import RequestBloodScreen from "./src/screens/RequestBloodScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -30,10 +31,8 @@ function CustomTabBar({ state, descriptors, navigation }) {
   return (
     <View style={tabStyles.container}>
       {state.routes.map((route, index) => {
-        const { options } = descriptors[route.key];
         const isFocused = state.index === index;
         const icons = TAB_ICONS[route.name];
-
         return (
           <View key={route.key} style={tabStyles.tabItem}>
             {isFocused && <View style={tabStyles.activeIndicator} />}
@@ -123,6 +122,11 @@ export default function App() {
           name="DonorDetail"
           component={DonorDetailScreen}
           options={{ animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="RequestBlood"
+          component={RequestBloodScreen}
+          options={{ animation: "slide_from_bottom" }}
         />
       </Stack.Navigator>
     </NavigationContainer>
