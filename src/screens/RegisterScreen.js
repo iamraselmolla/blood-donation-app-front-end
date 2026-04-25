@@ -9,10 +9,14 @@ import {
   Animated,
   Platform,
   KeyboardAvoidingView,
-  Dimensions,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SHADOW, RADIUS } from "../components/theme";
+
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+const API_BASE_URL = "https://your-api.com"; // 🔁 Replace with your backend URL
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const DISTRICTS = [
@@ -25,13 +29,93 @@ const DISTRICTS = [
   "Rangpur",
   "Mymensingh",
 ];
-
 const STEPS = ["Personal", "Medical", "Account"];
 
+// ─── VALIDATION ────────────────────────────────────────────────────────────────
+function validateStep(step, form) {
+  if (step === 0) {
+    if (!form.name.trim()) return "Full name is required.";
+    if (form.name.trim().length < 3)
+      return "Name must be at least 3 characters.";
+    if (!form.phone.trim()) return "Phone number is required.";
+    const cleanPhone = form.phone.replace(/[\s\-()]/g, "");
+    if (!/^(\+8801|01)\d{9}$/.test(cleanPhone))
+      return "Enter a valid Bangladeshi phone (+8801XXXXXXXXX).";
+    if (!form.age.trim()) return "Age is required.";
+    const age = parseInt(form.age, 10);
+    if (isNaN(age) || age < 18 || age > 65)
+      return "Donor age must be between 18 and 65.";
+    if (!form.district) return "Please select your district.";
+  }
+  if (step === 1) {
+    if (!form.bloodGroup) return "Blood group is required.";
+    if (!form.weight.trim()) return "Weight is required.";
+    const w = parseFloat(form.weight);
+    if (isNaN(w) || w < 45) return "Minimum donor weight is 45 kg.";
+  }
+  if (step === 2) {
+    if (!form.email.trim()) return "Email address is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+      return "Enter a valid email address.";
+    if (!form.password) return "Password is required.";
+    if (form.password.length < 8)
+      return "Password must be at least 8 characters.";
+  }
+  return null;
+}
+
+// ─── API SUBMISSION ────────────────────────────────────────────────────────────
+async function registerUser(form) {
+  const nameParts = form.name.trim().split(" ");
+  const payload = {
+    // ── Personal
+    display_name: form.name.trim(),
+    first_name: nameParts[0],
+    last_name: nameParts.slice(1).join(" ") || "",
+    phone: form.phone.replace(/[\s\-()]/g, ""),
+    age: parseInt(form.age, 10),
+    district: form.district,
+    division: form.division || "",
+    // ── Medical
+    blood_group: form.bloodGroup,
+    weight_kg: parseFloat(form.weight),
+    last_donated_at: form.lastDonation.trim() || null,
+    // ── Medical flags
+    is_smoker: form.smoker,
+    has_hepatitis_b: form.hepatitisB,
+    has_hepatitis_c: form.hepatitisC,
+    has_hiv: form.hiv,
+    has_diabetes: form.diabetic,
+    has_heart_disease: form.heartDisease,
+    has_malaria_recent: form.malaria,
+    // ── Account
+    email: form.email.trim().toLowerCase(),
+    password: form.password,
+  };
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || data.error || "Registration failed. Please try again.",
+    );
+  }
+  return data; // { user: {...}, token: "jwt-token" }
+}
+
+// ─── COMPONENT ─────────────────────────────────────────────────────────────────
 export default function RegisterScreen({ navigation }) {
   const [step, setStep] = useState(0);
   const [focused, setFocused] = useState(null);
   const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const slideAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
@@ -63,25 +147,60 @@ export default function RegisterScreen({ navigation }) {
     }).start();
   }, [step]);
 
-  const update = (key, val) => setForm((prev) => ({ ...prev, [key]: val }));
+  const update = (key, val) => {
+    setError("");
+    setForm((prev) => ({ ...prev, [key]: val }));
+  };
 
-  const nextStep = () => {
+  const handleBack = () => {
+    setError("");
+    step > 0 ? setStep((s) => s - 1) : navigation.goBack();
+  };
+
+  const handleNext = async () => {
+    const err = validateStep(step, form);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setError("");
+
     if (step < STEPS.length - 1) {
       Animated.sequence([
         Animated.timing(slideAnim, {
-          toValue: -30,
-          duration: 150,
+          toValue: -20,
+          duration: 120,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 180,
           useNativeDriver: true,
         }),
       ]).start();
       setStep((s) => s + 1);
     } else {
-      navigation.replace("Main");
+      await submitForm();
+    }
+  };
+
+  const submitForm = async () => {
+    setLoading(true);
+    try {
+      console.log("Submitting registration with data:", form);
+      return;
+      const result = await registerUser(form);
+      // Store token here if needed:
+      // await AsyncStorage.setItem("auth_token", result.token);
+      Alert.alert(
+        "🎉 Welcome to LifeDrop!",
+        "Your donor account has been created successfully.",
+        [{ text: "Let's Go!", onPress: () => navigation.replace("Main") }],
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -90,7 +209,18 @@ export default function RegisterScreen({ navigation }) {
     outputRange: ["0%", "100%"],
   });
 
+  const passwordStrength =
+    form.password.length === 0
+      ? null
+      : form.password.length < 6
+        ? { label: "Weak", color: "#E53935" }
+        : form.password.length < 10
+          ? { label: "Fair", color: COLORS.warning }
+          : { label: "Strong", color: COLORS.success };
+
+  // ── Reusable text input ─────────────────────────────────────────────────────
   const InputField = ({
+    fieldId,
     icon,
     label,
     placeholder,
@@ -98,35 +228,73 @@ export default function RegisterScreen({ navigation }) {
     onChangeText,
     keyboardType,
     secure,
-    id,
     multiline,
+    maxLength,
+    returnKeyType,
+    onSubmitEditing,
   }) => (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={[styles.inputWrap, focused === id && styles.inputFocused]}>
+      <View
+        style={[styles.inputWrap, focused === fieldId && styles.inputFocused]}
+      >
         <Ionicons
           name={icon}
           size={17}
-          color={focused === id ? COLORS.primary : COLORS.gray400}
+          color={focused === fieldId ? COLORS.primary : COLORS.gray400}
           style={styles.inputIcon}
         />
         <TextInput
           style={[
             styles.input,
-            multiline && { height: 60, textAlignVertical: "top" },
+            multiline && {
+              height: 70,
+              textAlignVertical: "top",
+              paddingTop: 10,
+            },
           ]}
           placeholder={placeholder}
           placeholderTextColor={COLORS.gray400}
           value={value}
           onChangeText={onChangeText}
           keyboardType={keyboardType || "default"}
-          secureTextEntry={secure && !showPass}
-          onFocus={() => setFocused(id)}
+          secureTextEntry={!!(secure && !showPass)}
+          autoCapitalize={
+            keyboardType === "email-address" || secure ? "none" : "words"
+          }
+          autoCorrect={false}
+          autoComplete={
+            fieldId === "email"
+              ? "email"
+              : fieldId === "phone"
+                ? "tel"
+                : fieldId === "pass"
+                  ? "password"
+                  : "off"
+          }
+          textContentType={
+            fieldId === "email"
+              ? "emailAddress"
+              : fieldId === "pass"
+                ? "newPassword"
+                : fieldId === "phone"
+                  ? "telephoneNumber"
+                  : "none"
+          }
+          maxLength={maxLength}
+          returnKeyType={returnKeyType || "done"}
+          onSubmitEditing={onSubmitEditing}
+          onFocus={() => setFocused(fieldId)}
           onBlur={() => setFocused(null)}
           multiline={multiline}
+          blurOnSubmit={!multiline}
+          editable={!loading}
         />
         {secure && (
-          <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+          <TouchableOpacity
+            onPress={() => setShowPass((p) => !p)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Ionicons
               name={showPass ? "eye-outline" : "eye-off-outline"}
               size={17}
@@ -138,37 +306,11 @@ export default function RegisterScreen({ navigation }) {
     </View>
   );
 
-  const BloodGroupSelector = () => (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.fieldLabel}>Blood Group</Text>
-      <View style={styles.bloodGrid}>
-        {BLOOD_GROUPS.map((g) => (
-          <TouchableOpacity
-            key={g}
-            style={[
-              styles.bloodChip,
-              form.bloodGroup === g && styles.bloodChipActive,
-            ]}
-            onPress={() => update("bloodGroup", g)}
-          >
-            <Text
-              style={[
-                styles.bloodChipText,
-                form.bloodGroup === g && styles.bloodChipTextActive,
-              ]}
-            >
-              {g}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-
   const ToggleField = ({ label, field, icon, subtitle }) => (
     <TouchableOpacity
       style={styles.toggleRow}
       onPress={() => update(field, !form[field])}
+      activeOpacity={0.8}
     >
       <View style={styles.toggleLeft}>
         <View
@@ -183,7 +325,7 @@ export default function RegisterScreen({ navigation }) {
             color={form[field] ? COLORS.primary : COLORS.gray400}
           />
         </View>
-        <View>
+        <View style={{ flex: 1, marginRight: 8 }}>
           <Text style={styles.toggleLabel}>{label}</Text>
           {subtitle && <Text style={styles.toggleSub}>{subtitle}</Text>}
         </View>
@@ -197,48 +339,51 @@ export default function RegisterScreen({ navigation }) {
   const renderStep0 = () => (
     <>
       <InputField
-        id="name"
+        fieldId="name"
         icon="person-outline"
-        label="Full Name"
-        placeholder="Your full name"
+        label="Full Name *"
+        placeholder="e.g. Rasel Ahmed"
         value={form.name}
         onChangeText={(v) => update("name", v)}
+        maxLength={100}
+        returnKeyType="next"
       />
       <InputField
-        id="phone"
+        fieldId="phone"
         icon="call-outline"
-        label="Phone Number"
-        placeholder="+880 17XX-XXXXXX"
+        label="Phone Number *"
+        placeholder="+8801712345678"
         value={form.phone}
         onChangeText={(v) => update("phone", v)}
         keyboardType="phone-pad"
+        maxLength={14}
+        returnKeyType="next"
       />
       <InputField
-        id="age"
+        fieldId="age"
         icon="calendar-outline"
-        label="Age"
+        label="Age *"
         placeholder="e.g. 25"
         value={form.age}
-        onChangeText={(v) => update("age", v)}
-        keyboardType="numeric"
+        onChangeText={(v) => update("age", v.replace(/[^0-9]/g, ""))}
+        keyboardType="number-pad"
+        maxLength={3}
       />
 
       <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>District</Text>
-        <View style={styles.districtGrid}>
+        <Text style={styles.fieldLabel}>District *</Text>
+        <View style={styles.chipGrid}>
           {DISTRICTS.map((d) => (
             <TouchableOpacity
               key={d}
-              style={[
-                styles.districtChip,
-                form.district === d && styles.districtChipActive,
-              ]}
+              style={[styles.chip, form.district === d && styles.chipActive]}
               onPress={() => update("district", d)}
+              activeOpacity={0.75}
             >
               <Text
                 style={[
-                  styles.districtChipText,
-                  form.district === d && styles.districtChipTextActive,
+                  styles.chipText,
+                  form.district === d && styles.chipTextActive,
                 ]}
               >
                 {d}
@@ -252,32 +397,58 @@ export default function RegisterScreen({ navigation }) {
 
   const renderStep1 = () => (
     <>
-      <BloodGroupSelector />
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Blood Group *</Text>
+        <View style={styles.bloodGrid}>
+          {BLOOD_GROUPS.map((g) => (
+            <TouchableOpacity
+              key={g}
+              style={[
+                styles.bloodChip,
+                form.bloodGroup === g && styles.bloodChipActive,
+              ]}
+              onPress={() => update("bloodGroup", g)}
+              activeOpacity={0.75}
+            >
+              <Text
+                style={[
+                  styles.bloodChipText,
+                  form.bloodGroup === g && styles.bloodChipTextActive,
+                ]}
+              >
+                {g}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
       <InputField
-        id="weight"
+        fieldId="weight"
         icon="barbell-outline"
-        label="Weight (kg)"
+        label="Weight (kg) *"
         placeholder="e.g. 65"
         value={form.weight}
-        onChangeText={(v) => update("weight", v)}
-        keyboardType="numeric"
+        onChangeText={(v) => update("weight", v.replace(/[^0-9.]/g, ""))}
+        keyboardType="decimal-pad"
+        maxLength={5}
       />
       <InputField
-        id="lastDonation"
+        fieldId="lastDonation"
         icon="water-outline"
         label="Last Donation Date"
-        placeholder="YYYY-MM-DD (or 'Never')"
+        placeholder="YYYY-MM-DD or blank"
         value={form.lastDonation}
         onChangeText={(v) => update("lastDonation", v)}
+        maxLength={10}
       />
 
       <View style={styles.sectionDivider}>
         <Text style={styles.sectionDividerText}>Medical Conditions</Text>
         <Text style={styles.sectionDividerSub}>
-          Required for donor eligibility — all info is confidential
+          Required for eligibility — strictly confidential
         </Text>
       </View>
-
       <ToggleField
         label="Smoker"
         field="smoker"
@@ -332,24 +503,56 @@ export default function RegisterScreen({ navigation }) {
         </Text>
       </View>
       <InputField
-        id="email"
+        fieldId="email"
         icon="mail-outline"
-        label="Email Address"
+        label="Email Address *"
         placeholder="your@email.com"
         value={form.email}
         onChangeText={(v) => update("email", v)}
         keyboardType="email-address"
+        maxLength={150}
+        returnKeyType="next"
       />
       <InputField
-        id="pass"
+        fieldId="pass"
         icon="lock-closed-outline"
-        label="Create Password"
+        label="Create Password *"
         placeholder="Min. 8 characters"
         value={form.password}
         onChangeText={(v) => update("password", v)}
         secure
-        id="pass"
+        maxLength={72}
+        returnKeyType="done"
+        onSubmitEditing={handleNext}
       />
+
+      {passwordStrength && (
+        <View style={styles.strengthRow}>
+          {[1, 2, 3].map((n) => (
+            <View
+              key={n}
+              style={[
+                styles.strengthBar,
+                {
+                  backgroundColor:
+                    n === 1
+                      ? passwordStrength.color
+                      : n === 2 && form.password.length >= 6
+                        ? passwordStrength.color
+                        : n === 3 && form.password.length >= 10
+                          ? passwordStrength.color
+                          : COLORS.gray200,
+                },
+              ]}
+            />
+          ))}
+          <Text
+            style={[styles.strengthLabel, { color: passwordStrength.color }]}
+          >
+            {passwordStrength.label}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.terms}>
         <Ionicons
@@ -359,7 +562,15 @@ export default function RegisterScreen({ navigation }) {
         />
         <Text style={styles.termsText}>
           By registering, you confirm your information is accurate and agree to
-          our donor guidelines.
+          our{" "}
+          <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+            Donor Guidelines
+          </Text>{" "}
+          and{" "}
+          <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+            Privacy Policy
+          </Text>
+          .
         </Text>
       </View>
     </>
@@ -367,20 +578,16 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1, backgroundColor: COLORS.primary }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() =>
-            step > 0 ? setStep((s) => s - 1) : navigation.goBack()
-          }
-          style={styles.backBtn}
-        >
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <View>
+        <View style={{ alignItems: "center" }}>
           <Text style={styles.headerTitle}>Donor Registration</Text>
           <Text style={styles.headerSub}>
             Step {step + 1} of {STEPS.length} — {STEPS[step]}
@@ -389,13 +596,50 @@ export default function RegisterScreen({ navigation }) {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Progress Bar */}
+      {/* Progress bar */}
       <View style={styles.progressTrack}>
         <Animated.View
           style={[styles.progressFill, { width: progressWidth }]}
         />
       </View>
 
+      {/* Step indicators */}
+      <View style={styles.stepDots}>
+        {STEPS.map((s, i) => (
+          <View key={s} style={styles.stepDotWrap}>
+            <View
+              style={[
+                styles.stepDot,
+                i < step && styles.stepDotDone,
+                i === step && styles.stepDotActive,
+              ]}
+            >
+              {i < step ? (
+                <Ionicons name="checkmark" size={12} color="#fff" />
+              ) : (
+                <Text
+                  style={[
+                    styles.stepDotNum,
+                    i === step && { color: COLORS.primary },
+                  ]}
+                >
+                  {i + 1}
+                </Text>
+              )}
+            </View>
+            <Text
+              style={[
+                styles.stepDotLabel,
+                i === step && { color: "#fff", fontWeight: "700" },
+              ]}
+            >
+              {s}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Scrollable form body */}
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
@@ -408,22 +652,40 @@ export default function RegisterScreen({ navigation }) {
           {step === 2 && renderStep2()}
         </Animated.View>
 
+        {/* Error banner */}
+        {!!error && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={16} color={COLORS.danger} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        {/* CTA button */}
         <TouchableOpacity
-          style={styles.nextBtn}
-          onPress={nextStep}
+          style={[styles.nextBtn, loading && { opacity: 0.7 }]}
+          onPress={handleNext}
           activeOpacity={0.85}
+          disabled={loading}
         >
-          <Text style={styles.nextBtnText}>
-            {step === STEPS.length - 1 ? "Complete Registration" : "Continue"}
-          </Text>
-          <Ionicons
-            name={step === STEPS.length - 1 ? "checkmark" : "arrow-forward"}
-            size={18}
-            color="#fff"
-          />
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Text style={styles.nextBtnText}>
+                {step === STEPS.length - 1
+                  ? "Complete Registration"
+                  : "Continue"}
+              </Text>
+              <Ionicons
+                name={step === STEPS.length - 1 ? "checkmark" : "arrow-forward"}
+                size={18}
+                color="#fff"
+              />
+            </>
+          )}
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 50 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -435,7 +697,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 55,
-    paddingBottom: 16,
+    paddingBottom: 12,
     paddingHorizontal: 20,
     backgroundColor: COLORS.primary,
   },
@@ -447,17 +709,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  headerSub: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
-    textAlign: "center",
-  },
+  headerTitle: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  headerSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 2 },
   progressTrack: {
     height: 4,
     backgroundColor: "rgba(255,255,255,0.25)",
@@ -465,15 +718,39 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   progressFill: { height: 4, backgroundColor: "#fff", borderRadius: 2 },
+  stepDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 40,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+  },
+  stepDotWrap: { alignItems: "center", gap: 5 },
+  stepDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepDotActive: { backgroundColor: "#fff" },
+  stepDotDone: { backgroundColor: COLORS.success },
+  stepDotNum: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  stepDotLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11 },
   scrollArea: { flex: 1, backgroundColor: COLORS.gray100 },
   scrollContent: { padding: 20 },
-  fieldGroup: { marginBottom: 18 },
+  fieldGroup: { marginBottom: 16 },
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.gray700,
     marginBottom: 8,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   inputWrap: {
     flexDirection: "row",
@@ -483,6 +760,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.gray200,
     borderRadius: RADIUS.md,
     paddingHorizontal: 14,
+    minHeight: 52,
   },
   inputFocused: { borderColor: COLORS.primary, backgroundColor: "#FFF5F5" },
   inputIcon: { marginRight: 10 },
@@ -490,7 +768,7 @@ const styles = StyleSheet.create({
   bloodGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   bloodChip: {
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: RADIUS.full,
     backgroundColor: "#fff",
     borderWidth: 1.5,
@@ -502,23 +780,23 @@ const styles = StyleSheet.create({
   },
   bloodChipText: { color: COLORS.gray700, fontWeight: "700", fontSize: 13 },
   bloodChipTextActive: { color: "#fff" },
-  districtGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  districtChip: {
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: RADIUS.full,
     backgroundColor: "#fff",
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
   },
-  districtChipActive: {
+  chipActive: {
     backgroundColor: COLORS.primaryBg,
     borderColor: COLORS.primary,
   },
-  districtChipText: { color: COLORS.gray600, fontSize: 13, fontWeight: "500" },
-  districtChipTextActive: { color: COLORS.primary, fontWeight: "700" },
+  chipText: { color: COLORS.gray600, fontSize: 13, fontWeight: "500" },
+  chipTextActive: { color: COLORS.primary, fontWeight: "700" },
   sectionDivider: {
-    marginVertical: 16,
+    marginVertical: 14,
     paddingVertical: 14,
     borderTopWidth: 1,
     borderBottomWidth: 1,
@@ -529,7 +807,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.primary,
   },
-  sectionDividerSub: { fontSize: 12, color: COLORS.gray500, marginTop: 2 },
+  sectionDividerSub: { fontSize: 12, color: COLORS.gray500, marginTop: 3 },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -540,23 +818,25 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     ...SHADOW.small,
   },
-  toggleLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  toggleLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   toggleIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   toggleLabel: { fontSize: 14, fontWeight: "600", color: COLORS.gray800 },
-  toggleSub: { fontSize: 11, color: COLORS.gray400, marginTop: 1 },
+  toggleSub: { fontSize: 11, color: COLORS.gray400, marginTop: 2 },
   toggleSwitch: {
-    width: 44,
-    height: 24,
-    borderRadius: 12,
+    width: 46,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: COLORS.gray200,
     justifyContent: "center",
-    padding: 2,
+    padding: 3,
+    flexShrink: 0,
   },
   toggleSwitchOn: { backgroundColor: COLORS.primary },
   toggleKnob: {
@@ -577,15 +857,36 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   eligibilityText: { color: COLORS.success, fontWeight: "600", fontSize: 14 },
+  strengthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: -8,
+    marginBottom: 14,
+  },
+  strengthBar: { flex: 1, height: 4, borderRadius: 2 },
+  strengthLabel: { fontSize: 12, fontWeight: "700", marginLeft: 4 },
   terms: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 10,
+    marginTop: 8,
     padding: 14,
     backgroundColor: COLORS.gray100,
     borderRadius: RADIUS.md,
   },
-  termsText: { flex: 1, fontSize: 12, color: COLORS.gray500, lineHeight: 18 },
+  termsText: { flex: 1, fontSize: 12, color: COLORS.gray500, lineHeight: 19 },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: COLORS.dangerBg,
+    borderRadius: RADIUS.md,
+    padding: 13,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E5393540",
+  },
+  errorText: { flex: 1, fontSize: 13, color: COLORS.danger, fontWeight: "500" },
   nextBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
@@ -594,7 +895,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: 10,
-    marginTop: 10,
+    marginTop: 8,
     ...SHADOW.large,
   },
   nextBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
