@@ -14,10 +14,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SHADOW, RADIUS } from "../components/theme";
-
-// ─── CONFIG ────────────────────────────────────────────────────────────────────
-const API_BASE_URL = "https://your-api.com"; // 🔁 Replace with your backend URL
-
+import http from "../utils/httpServices";
+import { registerUser as userRegistration } from "../utils/apiServices";
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const DISTRICTS = [
   "Bagerhat",
@@ -147,20 +145,8 @@ async function registerUser(form) {
     email: form.email.trim().toLowerCase(),
     password: form.password,
   };
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(
-      data.message || data.error || "Registration failed. Please try again.",
-    );
-  }
-  return data; // { user: {...}, token: "jwt-token" }
+  const response = await userRegistration(payload);
+  console.log("API response:", response);
 }
 
 // ─── COMPONENT ─────────────────────────────────────────────────────────────────
